@@ -1,0 +1,27 @@
+{
+  "name": "com.example.hello",
+  "version": "0.7.0",
+  "description": "Simple plugin that returns your string prefixed with hello.",
+  "cordova": {
+    "id": "com.example.hello",
+    "platforms": [
+      "android",
+      "ios",
+      "wp7"
+    ]
+  },
+  "keywords": [
+    "ecosystem:cordova",
+    "cordova-android",
+    "cordova-ios",
+    "cordova-wp7"
+  ],
+  "engines": [
+    {
+      "name": "cordova",
+      "version": ">=3.4.0"
+    }
+  ],
+  "author": "",
+  "license": "ISC"
+}
