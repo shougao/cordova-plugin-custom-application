@@ -5,16 +5,12 @@
   "cordova": {
     "id": "com.example.hello",
     "platforms": [
-      "android",
-      "ios",
-      "wp7"
+      "android"
     ]
   },
   "keywords": [
     "ecosystem:cordova",
-    "cordova-android",
-    "cordova-ios",
-    "cordova-wp7"
+    "cordova-android"
   ],
   "engines": [
     {
