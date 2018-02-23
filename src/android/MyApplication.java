@@ -1,6 +1,7 @@
 package com.example.plugin;
 
 import android.app.Application;
+import android.app.DownloadManager;
 import android.app.Service;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -8,12 +9,13 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
+import android.net.Uri;
+import android.os.Environment;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Message;
 import android.os.Process;
 import android.util.Log;
-import android.widget.Toast;
 
 
 import com.android.volley.Request;
@@ -39,8 +41,8 @@ public class MyApplication extends Application implements Handler.Callback {
     public static final int HANDLE_MESSAGE_DOWNLOAD_SO = 102;
     public static final int HANDLE_MESSAGE_DOWNLOAD_COMPLETE = 103;
 
-
-    private static final int RECHECK_INTERVAL_MS = 1000 * 60 * 10; // 如果没网络，10分钟检查一次，直到有网络为止
+//
+//    private static final int RECHECK_INTERVAL_MS = 1000 * 60 * 10; // 如果没网络，10分钟检查一次，直到有网络为止
     public static final int RECHECK_DELAY_MS = 1000 * 10;// delay cordova issues, todo zqc
 
 
@@ -51,6 +53,10 @@ public class MyApplication extends Application implements Handler.Callback {
     private static final String ENDPOINT = "https://kylewbanks.com/rest/posts.json";
     private RequestQueue mRequestQueue;
     private Gson mGson;
+
+    private DownloadManager mDownloadManager;
+    private DownLoadBroadcast mDownLoadBroadcast;
+    private long mDownloadId;
 
 
     private BroadcastReceiver mWifiReceiver = new BroadcastReceiver() {
@@ -78,15 +84,19 @@ public class MyApplication extends Application implements Handler.Callback {
 
     private void initInternal() {
 
+        SpUtil.init(getApplicationContext());
         GsonBuilder gsonBuilder = new GsonBuilder();
         gsonBuilder.setDateFormat("M/d/yy hh:mm a");
         mGson = gsonBuilder.create();
 
+        mDownloadManager = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
+
         mWorkerHandlerThread = new HandlerThread("soupdate", Process.THREAD_PRIORITY_BACKGROUND);
         mWorkerHandlerThread.start();
         mWorkerHandler = new Handler(mWorkerHandlerThread.getLooper(), this);
-        mWorkerHandler.sendEmptyMessageDelayed(HANDLE_MESSAGE_CHECK_VERSION, RECHECK_DELAY_MS);
-
+        if(!mWorkerHandler.hasMessages(HANDLE_MESSAGE_CHECK_VERSION)) {
+            mWorkerHandler.sendEmptyMessageDelayed(HANDLE_MESSAGE_CHECK_VERSION, RECHECK_DELAY_MS);
+        }
     }
 
 
@@ -105,13 +115,17 @@ public class MyApplication extends Application implements Handler.Callback {
             case HANDLE_MESSAGE_CHECK_VERSION_COMPLETE:
                 int newVersion = (int) message.obj;
                 if (newVersion > localVersion()) {
-                    downloadFromServer();
+                    Log.d(TAG, "start checkupdate, thread id=" + Thread.currentThread().getId());
+                    (new Exception(TAG)).printStackTrace();
+                    mWorkerHandler.sendEmptyMessage(HANDLE_MESSAGE_DOWNLOAD_SO);
                 } else {
                     exitHandlerThread();
                 }
+                break;
 
             case HANDLE_MESSAGE_DOWNLOAD_SO:
-
+                LogUtil.d(TAG, "start download.");
+                downloadFromServer();
                 break;
 
             case HANDLE_MESSAGE_DOWNLOAD_COMPLETE:
@@ -128,7 +142,7 @@ public class MyApplication extends Application implements Handler.Callback {
             default:
                 return true;
         }
-        Log.d(TAG, "start checkupdate, thread id=" + Thread.currentThread().getId());
+
         return true;
     }
 
@@ -158,7 +172,7 @@ public class MyApplication extends Application implements Handler.Callback {
 
     // TODO: 2/22/18 zqc, get from so.
     private int localVersion() {
-        return SpUtils.getLocalVersion(getApplicationContext());
+        return SpUtil.getLocalVersion(getApplicationContext());
     }
 
 
@@ -205,8 +219,8 @@ public class MyApplication extends Application implements Handler.Callback {
                 Log.d(TAG, "ID:" + post.ID + ", TITLE:" + post.title);
                 itemNumbers++;
             }
-            Toast.makeText(getApplicationContext(), "on line Data Parse successful.number= " + itemNumbers, Toast.LENGTH_LONG).show();
-            int fackedVersionNuber = 10;
+            
+            int fackedVersionNuber = 10;// TODO: 2/23/18 zqc 
             Message msg = mWorkerHandler.obtainMessage(HANDLE_MESSAGE_CHECK_VERSION_COMPLETE, fackedVersionNuber);
             mWorkerHandler.sendMessage(msg);
         }
@@ -219,8 +233,65 @@ public class MyApplication extends Application implements Handler.Callback {
         }
     };
 
-    private void downloadFromServer(){
-        return;
+    private void downloadFromServer() {
+        String url = "https://cdn2.jianshu.io/assets/web/nav-logo-4c7bbafe27adc892f3046e6978459bac.png";
+        Uri uri = Uri.parse(url);
+        DownloadManager.Request request = new DownloadManager.Request(uri);
+        request.setAllowedNetworkTypes(DownloadManager.Request.NETWORK_MOBILE | DownloadManager.Request.NETWORK_WIFI);
+        request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_HIDDEN);
+        request.setDestinationInExternalFilesDir(getApplicationContext(), Environment.DIRECTORY_DOWNLOADS, "soupdate");
+        request.setTitle("AndroidSoTitle");
+        request.setDescription("click to open");
+
+        mDownloadId = mDownloadManager.enqueue(request);
+        registerDownloadCompleteBroadcast();
+    }
+
+    private void registerDownloadCompleteBroadcast() {
+        /**注册service 广播 1.任务完成时 2.进行中的任务被点击*/
+        IntentFilter intentFilter = new IntentFilter();
+        intentFilter.addAction(DownloadManager.ACTION_DOWNLOAD_COMPLETE);
+//        intentFilter.addAction(DownloadManager.ACTION_NOTIFICATION_CLICKED);
+//        unregisterBroadcast();
+        LogUtil.d(TAG, "register zqc");
+        mDownLoadBroadcast = new DownLoadBroadcast();
+        registerReceiver(mDownLoadBroadcast, intentFilter);
+    }
+
+    /**
+     * 注销广播
+     */
+    private void unregisterBroadcast() {
+        if (mDownLoadBroadcast != null) {
+            unregisterReceiver(mDownLoadBroadcast);
+            mDownLoadBroadcast = null;
+        }
+    }
+
+
+
+    /**
+     * 接受下载完成广播
+     */
+    private class DownLoadBroadcast extends BroadcastReceiver {
+
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            long downId = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1);
+            switch (intent.getAction()) {
+                case DownloadManager.ACTION_DOWNLOAD_COMPLETE:
+                    if (mDownloadId == downId && downId != -1 && mDownloadManager != null) {
+                        Uri downIdUri = mDownloadManager.getUriForDownloadedFile(mDownloadId);
+                        if (downIdUri != null) {
+                            Log.i(TAG, "广播监听下载完成，APK存储路径为 ：" + downIdUri.getPath());
+                            SpUtil.put(Constant.SP_DOWNLOAD_PATH, downIdUri.getPath());
+//                            APPUtil.installApk(context, downIdUri);
+                            // TODO: 2/23/18 change so. zqc
+                        }
+                    }
+                    break;
+            }
+        }
     }
 
 }
