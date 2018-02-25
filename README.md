@@ -4,6 +4,12 @@ Simple plugin that returns your string prefixed with hello.
 
 Greeting a user with "Hello, world" is something that could be done in JavaScript. This plugin provides a simple example demonstrating how Cordova plugins work.
 
+## Branch
+
+master: 在cordova plugin中使用Application，并实现动态更新App中的so功能。
+
+dev: 在Application中实现APK下载安装。
+
 ## Using
 
 Create a new Cordova Project
