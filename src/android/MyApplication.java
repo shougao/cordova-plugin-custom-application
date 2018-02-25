@@ -18,18 +18,24 @@ import android.os.Process;
 import android.util.Log;
 
 
+import com.android.volley.AuthFailureError;
 import com.android.volley.Request;
 import com.android.volley.RequestQueue;
 import com.android.volley.Response;
 import com.android.volley.VolleyError;
+import com.android.volley.toolbox.JsonObjectRequest;
 import com.android.volley.toolbox.StringRequest;
 import com.android.volley.toolbox.Volley;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 
+import org.json.JSONObject;
+
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 
 
 public class MyApplication extends Application implements Handler.Callback {
@@ -41,7 +47,7 @@ public class MyApplication extends Application implements Handler.Callback {
     public static final int HANDLE_MESSAGE_DOWNLOAD_SO = 102;
     public static final int HANDLE_MESSAGE_DOWNLOAD_COMPLETE = 103;
 
-//
+    //
 //    private static final int RECHECK_INTERVAL_MS = 1000 * 60 * 10; // 如果没网络，10分钟检查一次，直到有网络为止
     public static final int RECHECK_DELAY_MS = 1000 * 10;// delay cordova issues, todo zqc
 
@@ -94,7 +100,7 @@ public class MyApplication extends Application implements Handler.Callback {
         mWorkerHandlerThread = new HandlerThread("soupdate", Process.THREAD_PRIORITY_BACKGROUND);
         mWorkerHandlerThread.start();
         mWorkerHandler = new Handler(mWorkerHandlerThread.getLooper(), this);
-        if(!mWorkerHandler.hasMessages(HANDLE_MESSAGE_CHECK_VERSION)) {
+        if (!mWorkerHandler.hasMessages(HANDLE_MESSAGE_CHECK_VERSION)) {
             mWorkerHandler.sendEmptyMessageDelayed(HANDLE_MESSAGE_CHECK_VERSION, RECHECK_DELAY_MS);
         }
     }
@@ -203,8 +209,67 @@ public class MyApplication extends Application implements Handler.Callback {
      */
     private void getRemoteNewVersion() {
         mRequestQueue = Volley.newRequestQueue(getApplicationContext());
+        // 不添加参数
         StringRequest request = new StringRequest(Request.Method.GET, ENDPOINT, onPostLoaded, onPostError);
         mRequestQueue.add(request);
+
+
+        // 添加参数
+        StringRequest customRequest = new StringRequest(Request.Method.GET, ENDPOINT, onPostLoaded, onPostError){
+            @Override
+            protected Map<String,String> getParams(){
+                Map<String,String> params = new HashMap<String, String>();
+                params.put("user","x"/*userAccount.getUsername()*/);
+                params.put("pass","x"/*userAccount.getPassword()*/);
+                params.put("comment", "x"/*Uri.encode(comment)*/);
+                params.put("comment_post_ID",String.valueOf(0/*postId*/));
+                params.put("blogId",String.valueOf(0/*blogId*/));
+                return params;
+            }
+
+            @Override
+            public Map<String, String> getHeaders() throws AuthFailureError {
+                Map<String,String> params = new HashMap<String, String>();
+                params.put("Content-Type","application/x-www-form-urlencoded");
+                return params;
+            }
+        };
+        mRequestQueue.add(customRequest);
+
+
+        // 添加json格式参数
+        final String URL = "http://m.weather.com.cn/data/101010100.html";
+        // Post params to be sent to the server
+        HashMap<String, String> params = new HashMap<String, String>();
+        params.put("token", "AbCdEfGh123456");
+
+        JsonObjectRequest jsonObjectRequest = new JsonObjectRequest(URL, new JSONObject(params),
+                new Response.Listener<JSONObject>() {
+                    @Override
+                    public void onResponse(JSONObject response) {
+
+                        LogUtil.d(TAG, "zqc" + response.toString());
+                    }
+                }, new Response.ErrorListener() {
+            @Override
+            public void onErrorResponse(VolleyError error) {
+
+                LogUtil.d(TAG, "zqc" + error.toString());
+            }
+        })/*{
+            @Override
+            protected Map<String,String> getParams() {
+                // something to do here ??
+                return params;
+            }
+
+            @Override
+            public Map<String, String> getHeaders() throws AuthFailureError {
+                // something to do here ??
+                return params;
+            }
+        }*/;
+        mRequestQueue.add(jsonObjectRequest);
     }
 
     private Response.Listener<String> onPostLoaded = new Response.Listener<String>() {
@@ -219,7 +284,7 @@ public class MyApplication extends Application implements Handler.Callback {
                 Log.d(TAG, "ID:" + post.ID + ", TITLE:" + post.title);
                 itemNumbers++;
             }
-            
+
             int fackedVersionNuber = 10;// TODO: 2/23/18 zqc 
             Message msg = mWorkerHandler.obtainMessage(HANDLE_MESSAGE_CHECK_VERSION_COMPLETE, fackedVersionNuber);
             mWorkerHandler.sendMessage(msg);
@@ -267,7 +332,6 @@ public class MyApplication extends Application implements Handler.Callback {
             mDownLoadBroadcast = null;
         }
     }
-
 
 
     /**
